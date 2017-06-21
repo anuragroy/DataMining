@@ -1,0 +1,434 @@
+---
+title: 'ISyE 7406: Assignment 2 Appendix'
+author: "Anurag Roy"
+date: "February 7, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+#knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(dev  = 'pdf')
+```
+
+#Appendix
+## Problem 1 (R exercise for linear Regression) 
+
+### (a): Loading data; Splitting into training and test data
+
+```{r part_a}
+fat <- read.table(file = "fat.csv",sep=",", header=TRUE)
+n = dim(fat)[1] ### total number of observations
+
+n1 = round(n/10) ### number of observations randomly selected for testing data
+
+set.seed(20170201) ### set the random seed
+
+flag = sort(sample(1:n, n1))
+
+fat1train = fat[-flag,]
+
+fat1test = fat[flag,]
+
+```
+      
+      
+      
+      
+### (b): Exploratory (or preliminary) data analysis    
+
+Scatterplot Matrices of the various variables can help us investigate potential collinearity.    
+    
+```{r sploms, fig.width=5, fig.height=5}
+#Scatterplot Matrices
+library(lattice)
+par(mfrow = c(1,1))
+splom(fat1train[,1:18], pscales = 0)
+#splom(fat1train[,1:9], pscales = 0)
+#splom(fat1train[,c(1, 7:12)], pscales = 0)
+#splom(fat1train[,c(1, 10:18)], pscales = 0)
+
+```
+     
+Correlation matrix:
+
+```{r correlation_matrix}
+corr<- round(cor(fat1train[1:18]),2)
+View(corr)
+
+
+high_correlations<- subset(as.data.frame(as.table(corr )), abs(Freq)>0.5 & Var1 == "brozek" & Var1!=Var2)
+
+high_correlations
+```
+    
+    
+Scatterplots of variables having correlations>0.5 with the response variable    
+    
+```{r high_corr_scatterplots, fig.width=9, fig.height=9}
+par(mfrow=c(3,3))
+
+plot(fat1train$siri, fat1train$brozek, xlab = "siri", ylab= "brozek")
+plot(fat1train$density, fat1train$brozek, xlab = "density", ylab= "brozek")
+plot(fat1train$weight, fat1train$brozek, xlab = "weight", ylab= "brozek")
+plot(fat1train$adipos, fat1train$brozek, xlab = "adipos", ylab= "brozek")
+plot(fat1train$chest, fat1train$brozek, xlab = "chest", ylab= "brozek")
+plot(fat1train$abdom, fat1train$brozek, xlab = "abdom", ylab= "brozek")
+plot(fat1train$hip, fat1train$brozek, xlab = "hip", ylab= "brozek")
+plot(fat1train$thigh, fat1train$brozek, xlab = "thigh", ylab= "brozek")
+plot(fat1train$knee, fat1train$brozek, xlab = "knee", ylab= "brozek")
+
+
+```
+
+```{r outliers}    
+par(mfrow = c(3,3))
+for (i in 1:9) boxplot(fat[,i], xlab=names(fat)[i])
+for (i in 10:18) boxplot(fat[,i], xlab=names(fat)[i])
+   
+```  
+     
+      
+```{r collinearity}    
+# Fit a linear regression on the training data
+model0 <- lm( brozek ~ ., data = fat1train); 
+summary(model0); 
+
+#Condition Numbers
+X <- model.matrix(model0);
+eign1 <- eigen( t(X) %*% X); 
+round(eign1$val,2)
+sqrt( eign1$val[1] / eign1$val)
+
+
+###### check variance inflation factors (VIF)
+VIF1 <- NULL;
+X <- model.matrix(model0);
+for (i in 2:18) VIF1 <- cbind(VIF1, 1/(1-summary(lm(X[,i] ~ X[,-i]))$r.squared)); 
+colnames(VIF1) <- colnames(fat1train)[2:18]
+VIF1
+
+
+model0b <- lm( brozek ~ . - siri - density - weight, data = fat1train); 
+summary(model0b)
+
+## There are several large pairwise correlation both between predictors
+##   and between predictors and the response (brozek). 
+
+## Compare to original model, R^2 and \sigma\hat are similar
+c(summary(model0b)$r.squared, summary(model0)$r.squared)
+#[1] 0.9310401 0.9995463
+c(summary(model0b)$sig, summary(model0)$sigma)
+# 2.0772426 0.1697019
+
+```    
+
+    
+    
+    
+
+### (c & d): Methods & testing errors    
+#### (i) Linear regression with all predictors.     
+     
+```{r model1}
+model1 <-  lm( brozek ~ ., data = fat1train)
+
+MSE1mod1 <-   mean( (resid(model1) )^2)
+# testing error 
+pred1a <- predict(model1, fat1test[,-1])
+
+MSE2mod1 <-   mean((pred1a - fat1test[,1])^2)
+
+
+```
+       
+       
+       
+#### (ii) Linear regression with the best subset of k = 5 predictors variables;     
+       
+```{r model2}       
+
+library(leaps)
+fat.leaps <- regsubsets(brozek ~ ., data= fat1train, nbest= 100, really.big= TRUE)
+
+fat.models <- summary(fat.leaps)$which
+
+fat.models.size <- as.numeric(attr(fat.models, "dimnames")[[1]])
+
+fat.models.rss <- summary(fat.leaps)$rss
+
+par(mfrow = c(1,1))
+plot(fat.models.size, fat.models.rss)
+
+#best subset for k=5
+op2 <- which(fat.models.size == 5)
+
+flag2 <- op2[which.min(fat.models.rss[op2])]
+
+fat.models[flag2,]
+
+model2 <- lm( brozek ~ siri+density+thigh+knee+biceps, data = fat1train)
+
+# traning and testing errors 
+summary(model2)
+MSE1mod2 <- mean(resid(model2)^2)
+pred2 <- predict(model2, fat1test[,-1])
+MSE2mod2 <-   mean((pred2 - fat1test[,1])^2)
+MSE2mod2
+
+
+```       
+
+#### (iii) Linear regression with variables (stepwise) selected using AIC;    
+    
+```{r model3}           
+model3  <- step(model1, trace = 0)
+## see the coefficents of \beta of model3
+round(coef(model3),3)
+summary(model3)
+MSE1mod3 <- mean(resid(model3)^2)
+pred3 <- predict(model3, fat1test[,-1])
+MSE2mod3 <-   mean((pred3 - fat1test[,1] )^2)
+
+    
+```       
+
+#### (iv) Ridge regression;    
+     
+```{r model4}                
+library(MASS)     
+fat.ridge <- lm.ridge( brozek ~ ., data = fat1train, lambda= seq(0,100,0.01))
+plot(fat.ridge)
+##"matplot" to plot the columns of one matrix against the columns of another
+matplot(fat.ridge$lambda, t(fat.ridge$coef), type="l", lty=1, xlab=expression(lambda), ylab=expression(hat(beta)))
+
+select(fat.ridge)
+#modified HKB estimator is 0.009030365 
+#modified L-W estimator is 0.007395608 
+#smallest value of GCV  at 0 
+
+
+## (b) Auto-find the optimal lambda value
+lambdaopt <- which.min(fat.ridge$GCV)
+mod4.coef <- coef(fat.ridge)[lambdaopt,]
+round(mod4.coef, 4)
+
+## The coefficient of ridge on the scaled data
+rig1coef <- fat.ridge$coef[,lambdaopt]
+## find the intercepts using ybar and xbar from training data
+rig1intercepts <- fat.ridge$ym - sum(fat.ridge$xm * (rig1coef / fat.ridge$scales))
+
+pred4 <- scale(fat1test[,-1], center = F, scale = fat.ridge$scales)%*%  rig1coef + rig1intercepts;
+MSE2mod4 <- mean( (pred4 - fat1test[,1])^2);
+
+MSE2mod4
+
+```       
+#### (v) LASSO;     
+     
+```{r model5}                     
+     
+library(lars)
+fat.lars <- lars( as.matrix(fat1train[,-1]), fat1train[,1], type= "lasso", trace= TRUE); 
+plot(fat.lars)
+
+
+## select the path with the smallest Cp 
+Cp1  <- summary(fat.lars)$Cp
+index1 <- which.min(Cp1)
+    
+coef(fat.lars)[index1,]
+
+
+
+## Fitted value
+## training error for lasso
+lasso.lambda <-fat.lars$lambda[index1]
+fit5 <- predict(fat.lars, as.matrix(fat1train[,-1]), s=lasso.lambda, type="fit", mode="lambda")
+yhat5 <- fit5$fit 
+MSE1mod5 <- mean( (yhat5 - fat1train[,1])^2)
+MSE1mod5
+
+### test error for lasso 
+
+fit5b <- predict(fat.lars, as.matrix(fat1test[,-1]), s=lasso.lambda, type="fit", mode="lambda")
+yhat5b <- fit5b$fit 
+MSE2mod5 <- mean( (yhat5b - fat1test[,1])^2)
+MSE2mod5
+
+```       
+
+#### (vi) Principal component regression;     
+
+```{r model6}                     
+## PCA of training data
+trainpca <- prcomp(fat1train[,-1])
+
+## Examine the square root of eigenvalues
+## Most variation in the predictors can be explained 
+## in the first a few dimensions
+trainpca$sdev
+round(trainpca$sdev,2)
+
+
+### Eigenvectors are in oj$rotation
+
+matplot(2:18, trainpca$rot[,1:3], type ="l", xlab="", ylab="")
+matplot(2:18, trainpca$rot[,1:4], type ="l", xlab="", ylab="")
+
+matplot(2:18, trainpca$rot[,1:5], type ="l", xlab="", ylab="")
+
+## Choose a number beyond which all e. values are relatively small 
+plot(trainpca$sdev,type="l", ylab="SD of PC", xlab="PC number")
+
+## Using  # of PCs as 4, get Pcs from obj$x
+modelpca <- lm(brozek ~ trainpca$x[,1:4], data = fat1train)
+
+
+## The PCA on \beta for the original model Y=X\beta + epsilon
+## since Y= Z\gamma = (X U) \gamma = X(U\gamma)
+beta.pca <- trainpca$rot[,1:4] %*% modelpca$coef[-1]
+
+#Prediction for PCA using predict()
+
+library(pls)
+par(mfrow = c(1,1))
+fat.pca <- pcr(brozek~., data=fat1train, validation="CV")
+validationplot(fat.pca)
+summary(fat.pca)
+
+ypred6 <- predict(fat.pca, ncomp = 4, newdata = fat1test[,-1])
+MSE2mod6 <- mean( (ypred6 - fat1test[,1])^2)
+MSE2mod6 
+
+
+```       
+
+     
+     
+     
+
+#### (vii) Partial least squares.     
+     
+
+
+```{r model7}                     
+
+fat.pls <- plsr(brozek ~ ., data = fat1train, validation="CV")
+#Autoselecting number of components of PLS
+
+mod7ncompopt <- which.min(fat.pls$validation$adj) #selects entire model
+
+ypred7bb <- predict(fat.pls, ncomp = mod7ncompopt, newdata = fat1test[,-1])
+MSE2mod7 <- mean( (ypred7bb - fat1test[,1])^2)
+
+c(MSE2mod1, MSE2mod2, MSE2mod3, MSE2mod4, MSE2mod5, MSE2mod6, MSE2mod7)
+
+```       
+
+
+        
+        
+        
+        
+
+
+
+### (e): Computing average performances
+
+```{r part_e}        
+
+B= 100; ### number of loops
+TEALL = NULL; ### Final TE values
+for (b in 1:B){
+### randomly select 25 observations as testing data in each loop
+n = 25
+flag <- sort(sample(1:n, n1))
+fattrain <- fat[-flag,]
+fattest <- fat[flag,]
+### you can write your own R code here to first fit each model to "fattrain"
+### then get the testing error (TE) values on the testing data "fattest"
+### Suppose that you save the TE values for these five models as
+### te1, te2, te3, te4, te5, te6, te7, respectively, within this loop
+### Then you can save these 5 Testing Error values by using the R code
+###
+
+#Linear regression with all predictors.
+model1 <-  lm( brozek ~ ., data = fattrain)
+pred1a <- predict(model1, fattest[,-1])
+te1 <-   mean((pred1a - fattest[,1])^2)
+
+#Linear regression with the best subset of k = 5 predictors variables;
+library(leaps)
+fat.leaps <- regsubsets(brozek ~ ., data= fattrain, nbest= 100, really.big= TRUE)
+fat.models <- summary(fat.leaps)$which
+fat.models.size <- as.numeric(attr(fat.models, "dimnames")[[1]])
+fat.models.rss <- summary(fat.leaps)$rss
+op2 <- which(fat.models.size == 5)
+flag2 <- op2[which.min(fat.models.rss[op2])]
+fat.models[flag2,]
+mod2selectedmodel <- fat.models[flag2,]; 
+mod2Xname <- paste(names(mod2selectedmodel)[mod2selectedmodel][-1], collapse="+"); 
+mod2form <- paste ("brozek ~", mod2Xname);
+model2 <- lm( as.formula(mod2form), data= fattrain); 
+pred2 <- predict(model2, fattest[,-1]);
+te2 <-   mean((pred2 - fattest[,1])^2);
+
+#Linear regression with variables (stepwise) selected using AIC
+model3  <- step(model1, trace = 0)
+pred3 <- predict(model3, fattest[,-1])
+te3 <-   mean((pred3 - fattest[,1] )^2)
+
+#Ridge
+
+library(MASS)     
+fat.ridge <- lm.ridge( brozek ~ ., data = fattrain, lambda= seq(0,100,0.01))
+lambdaopt <- which.min(fat.ridge$GCV)
+rig1coef <- fat.ridge$coef[,lambdaopt]
+rig1intercepts <- fat.ridge$ym - sum(fat.ridge$xm * (rig1coef / fat.ridge$scales))
+pred4 <- scale(fattest[,-1], center = F, scale = fat.ridge$scales)%*%  rig1coef + rig1intercepts;
+te4 <- mean( (pred4 - fattest[,1])^2);
+
+
+##Lasso
+library(lars)
+fat.lars <- lars( as.matrix(fattrain[,-1]), fattrain[,1], type= "lasso", trace= FALSE); 
+## select the path with the smallest Cp 
+Cp1  <- summary(fat.lars)$Cp
+index1 <- which.min(Cp1)
+coef(fat.lars)[index1,]
+lasso.lambda <-fat.lars$lambda[index1]
+
+### test error for lasso 
+fit5b <- predict(fat.lars, as.matrix(fattest[,-1]), s=lasso.lambda, type="fit", mode="lambda")
+yhat5b <- fit5b$fit 
+te5 <- mean( (yhat5b - fattest[,1])^2)
+
+
+
+## Principal component regression;     
+library(pls)
+fat.pca <- pcr(brozek~., data=fattrain, validation="CV"); 
+ncompopt <- which.min(fat.pca$validation$adj);
+ypred6bb <- predict(fat.pca, ncomp = ncompopt, newdata = fattest[,-1]); 
+te6 <- mean( (ypred6bb - fattest$brozek)^2); 
+
+#PLS
+fat.pls <- plsr(brozek ~ ., data = fattrain, validation="CV")
+mod7ncompopt <- which.min(fat.pls$validation$adj) #selects entire model
+
+ypred7bb <- predict(fat.pls, ncomp = mod7ncompopt, newdata = fattest[,-1])
+te7 <- mean( (ypred7bb - fattest[,1])^2)
+
+
+TEALL = rbind( TEALL, cbind(te1, te2, te3, te4, te5, te6, te7) );
+
+#cat("Completed step" ,b, "of", B, "\n")
+}
+dim(TEALL); ### This should be a Bx7 matrices
+### if you want, you can change the column name of TEALL
+colnames(TEALL) <- c("mod1", "mod2", "mod3", "mod4", "mod5", "mod6", "mod7");
+## You can report the sample mean and sample variances for the five models
+
+apply(TEALL, 2, mean)
+apply(TEALL, 2, var)
+```       
