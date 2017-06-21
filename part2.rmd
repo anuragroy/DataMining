@@ -1,0 +1,189 @@
+---
+title: "Appendix: R Code"
+author: "Anurag Roy"
+date: "February 21, 2017"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+
+rm(list = ls())
+setwd("C:/Users/Anurag/Dropbox/GaTech/Sem 2/classes/isye7406/homework/hw3")
+
+Auto1 <- read.table(file = "Auto.csv", sep = ",", header=T)
+
+###part a
+summary(Auto1)
+library(pastecs)
+stat.desc(Auto1)
+
+###part b
+mpg01 = I(Auto1$mpg >= median(Auto1$mpg))
+#mpg01 = (ifelse(Auto1$mpg >= median(Auto1$mpg), 1, 0))
+
+
+Auto = data.frame(mpg01, Auto1[,-1]); ## replace column "mpg" by "mpg01"
+Auto[,1] = as.factor(Auto[,1])
+
+
+###part c
+
+summary(Auto)
+
+#splom(Auto[,1:8], pscales = 0)
+splom(Auto[,c(1, 3:6)], pscales = 0)
+
+#to confirm this, we will build boxplots for each of them vs mpg01
+par(mfrow = c(2,2))
+boxplot(Auto[,3]~Auto[,1], xlab = "mpg01", ylab = "displacement", main = "mpg01 vs displacement" )
+boxplot(Auto[,4]~Auto[,1], xlab = "mpg01", ylab = "horsepower" , main = "mpg01 vs horsepower" )
+boxplot(Auto[,5]~Auto[,1], xlab = "mpg01", ylab = "weight" , main = "mpg01 vs weight" )
+boxplot(Auto[,6]~Auto[,1], xlab = "mpg01", ylab = "acceleration" , main = "mpg01 vs acceleration" )
+#displacement, weight, horsepower seem to predict mpg01 best
+
+round(cor(Auto[,c(3:6)]) ,2)
+#highly correlated predictors
+##displacement & weight: 0.933
+##displacement & horsepower: 0.897
+##horsepower & weight: 0.865
+
+##Collinearity checks
+Auto1.sub <- Auto1[,c(1, 3:6)]
+model0 <- lm(mpg ~ displacement + weight + horsepower + acceleration, data = Auto1.sub)
+#summary(model0)
+
+##variance inflation factors (VIF)
+VIF0 <- NULL
+X <- model.matrix(model0)
+for (i in 2:5) VIF0 <- cbind(VIF0, 1/(1-summary(lm(X[,i] ~ X[,-i]))$r.squared));
+colnames(VIF0) <- colnames(Auto1.sub)[2:5]
+VIF0
+
+model1 <- lm(mpg ~  . - displacement, data = Auto1.sub)
+#summary(model1)
+VIF1 <- NULL
+X <- model.matrix(model1)
+for (i in 2:4) VIF1 <- cbind(VIF1, 1/(1-summary(lm(X[,i] ~ X[,-i]))$r.squared));
+colnames(VIF1) <- colnames(Auto1.sub)[3:5]
+VIF1
+
+
+
+#categorical variables
+#Auto[,2] <-as.factor(Auto[,2])
+#Auto[,7] <-as.factor(Auto[,7])
+#Auto[,8] <-as.factor(Auto[,8])
+
+mosaicplot(~ Auto[,1] + Auto[,2], main = "Mosaic: mpg01 vs cylinders", color = TRUE)
+mosaicplot(~ Auto[,1] + Auto[,7], main = "Mosaic: mpg01 vs year", color = TRUE)
+mosaicplot(~ Auto[,1] + Auto[,8], main = "Mosaic: mpg01 vs origin", color = TRUE)
+#cylinder and origin appear to predict mpg01 well
+```
+
+
+
+```{r cars2}
+###part d
+library(caTools)
+set.seed(10)
+
+
+#Splitting data, keeping 1/5th of the data as the test set
+Auto_new = Auto[,c(1,2,4,5,8)]
+
+sample = sample.split(Auto_new$weight, SplitRatio = .8) 
+train = subset(Auto_new, sample == TRUE)
+test = subset(Auto_new, sample == FALSE)
+
+###part e
+####part e.1) LDA
+library(MASS)
+
+fit1 <- lda(train[,-1], train[,1])
+
+pred1 <- predict(fit1,train[,-1])$class
+mean( pred1  != train[,1]) 
+#0.1159875
+
+te1<- mean( predict(fit1,test[,-1])$class != test[,1])
+#0.08219178
+
+
+####part e.2) QDA
+
+fit2 <- qda(train[,-1], train[,1])
+##
+pred2 <- predict(fit2,train[,-1])$class
+mean( pred2!= train[,1]) 
+## 0.1034483 for miss.class.train.error
+
+te2<- mean( predict(fit2,test[,-1])$class != test[,1]) 
+#0.05479452
+
+
+####part e.3) Naive Bayes
+library(e1071)
+fit3 <- naiveBayes( train[,-1], train[,1])
+pred3 <- predict(fit3, train[,-1]);
+mean( pred3 != train[,1]) 
+##  0.1191223 for miss.class.train.error
+
+te3<- mean( predict(fit3,test[,-1]) != test[,1]) 
+##  0.08219178 for miss.class.test.error
+
+
+####part e.4) Logistic Regression
+#fit4 <- glm(mpg01 ~ . , family = binomial, data = train)
+
+fit4 <- glm(mpg01 ~ as.factor(cylinders)  + horsepower + weight + as.factor(origin) , family = binomial, data = train)
+summary(fit4)
+#The summary indicates that origin is not statistically significant.
+
+
+pred4 <- predict(fit4, test[,-1], type ="response")
+y_pred4<- ifelse(pred4>0.5,TRUE,FALSE)
+te4<- sum(y_pred4!= test[,1])/length(test[,1])
+
+#We can now use the step function to find a submodel of the logistic regression
+step(fit4)$anova
+
+#this indicates that origin and cylinder is not improving the model as opposed to the other 3 predictors. 
+#We can now rebuilt the logsitic model based on the information learned from the model summary and ANOVA test
+
+fit4b <- glm(mpg01 ~ weight + horsepower + as.factor(cylinders) , family = binomial, data = train)
+summary(fit4b)
+
+pred4b <- predict(fit4b, test[,-1], type ="response")
+y_pred4b<- ifelse(pred4b>0.5,TRUE,FALSE)
+te4b<- sum(y_pred4b!= test[,1])/length(test[,1])
+#testing error: 0.08219178
+
+
+####part e.5) KNN
+library(class)
+
+K <- 50
+xnew2 <- test[,-1]
+TEALL <- NULL
+
+
+for (kk in 1:K) {
+ypred2.test <- knn(train[,-1], xnew2, train[,1], k=kk);
+te<- mean( ypred2.test != test[,1]) 
+TEALL = rbind( TEALL, cbind(kk, te))
+}
+
+#TEALL
+te5<- min(TEALL[,2])
+
+par(mfrow = c(1,1))
+plot(TEALL[,1], TEALL[,2], type = "o", xlab = "Value of K", ylab = "Testing Error", main = "KNN performance")
+
+
+cbind(te1, te2, te3, te4, te4b, te5)
+```
