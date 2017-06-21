@@ -13,7 +13,6 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r cars}
 
 rm(list = ls())
-setwd("C:/Users/Anurag/Dropbox/GaTech/Sem 2/classes/isye7406/homework/hw3")
 
 Auto1 <- read.table(file = "Auto.csv", sep = ",", header=T)
 
