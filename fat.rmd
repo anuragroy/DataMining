@@ -1,5 +1,5 @@
 ---
-title: 'ISyE 7406: Assignment 2 Appendix'
+title: 'FarawayFatData_Analysis'
 author: "Anurag Roy"
 date: "February 7, 2017"
 output: pdf_document
